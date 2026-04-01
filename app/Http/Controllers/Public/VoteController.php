@@ -100,14 +100,16 @@ class VoteController extends Controller
             'event'      => $event,
             'candidates' => $candidates,
             'token'      => $token,
-            'endsAt'     => optional($session->selesai_at)->timestamp,
+            'endsAt'     => $session->selesai_at
+                ? \Carbon\Carbon::parse($session->selesai_at)->timestamp
+                : null,
         ]);
     }
 
 
     /*
     |--------------------------------------------------------------------------
-    | SUBMIT VOTE
+    | SUBMIT VOTE (UPDATED: REDIRECT TO RESULT WITH ALERT)
     |--------------------------------------------------------------------------
     */
     public function submit(Request $request, ActiveSessionResolver $resolver)
@@ -126,8 +128,9 @@ class VoteController extends Controller
                 ->with('error', 'Session voting tidak ditemukan.');
         }
 
+        // Jika token sudah terpakai, langsung lempar ke hasil session tersebut
         if ($token->is_used) {
-            return redirect('/vote/success');
+            return redirect()->route('public.result.show', $token->voting_session_id);
         }
 
         $member = $token->member;
@@ -151,9 +154,10 @@ class VoteController extends Controller
 
         /*
         | ONE PERSON ONE VOTE
+        | Jika sudah pernah vote, lempar ke hasil
         */
         if ($member->hasVotedInEvent($event->id)) {
-            return redirect('/vote/success');
+            return redirect()->route('public.result.show', $session->id);
         }
 
         /*
@@ -194,11 +198,20 @@ class VoteController extends Controller
         });
 
         /*
+        | AMBIL ID SESSION UNTUK REDIRECT
+        */
+        $targetSessionId = $session->id;
+
+        /*
         | CLEAR SESSION TOKEN
         */
         session()->forget('voting_token_id');
 
-        return redirect('/vote/success');
+        /*
+        | REDIRECT LANGSUNG KE HALAMAN HASIL DENGAN NOTIFIKASI
+        */
+        return redirect()->route('public.result.show', $targetSessionId)
+            ->with('success', 'Terima kasih! Suara Anda berhasil dikirim.');
     }
 
 
@@ -227,11 +240,12 @@ class VoteController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | SUCCESS PAGE
+    | SUCCESS PAGE (MODIFIED TO REDIRECT)
     |--------------------------------------------------------------------------
     */
     public function success()
     {
-        return view('voting.success');
+        // Halaman ini tidak lagi diperlukan jika submit langsung redirect ke hasil
+        return redirect()->route('public.result.index');
     }
 }

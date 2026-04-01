@@ -14,24 +14,33 @@ class VoterController extends Controller
     | INDEX
     |--------------------------------------------------------------------------
     */
-    public function index()
+    public function index(Request $request)
     {
-        $voters = Member::pemilih()
+        $query = Member::pemilih()
             ->with('event')
             ->join('voting_events', 'members.voting_event_id', '=', 'voting_events.id')
-            ->orderBy('voting_events.judul')
+            ->select('members.*');
+
+        // Fitur Pencarian Nama
+        if ($request->has('search')) {
+            $query->where('members.nama', 'like', '%' . $request->search . '%');
+        }
+
+        // Fitur Filter per Event
+        if ($request->filled('event_id')) {
+            $query->where('members.voting_event_id', $request->event_id);
+        }
+
+        $voters = $query->orderBy('voting_events.judul')
             ->orderBy('members.nama')
-            ->select('members.*')
-            ->paginate(20);
+            ->paginate(20)
+            ->withQueryString(); // Agar pagination tidak hilang saat di-filter
 
-        $trashCount = Member::onlyTrashed()
-            ->pemilih()
-            ->count();
+        $events = VotingEvent::orderBy('judul')->get();
 
-        return view('admin.voters.index', compact(
-            'voters',
-            'trashCount'
-        ));
+        $trashCount = Member::onlyTrashed()->pemilih()->count();
+
+        return view('admin.voters.index', compact('voters', 'trashCount', 'events'));
     }
 
     /*
@@ -69,10 +78,10 @@ class VoterController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'voting_event_id' => ['required','exists:voting_events,id'],
-            'nama'            => ['required','string','max:255'],
-            'asal_sekolah'    => ['nullable','string','max:255'],
-            'no_hp'           => ['nullable','string','max:20'],
+            'voting_event_id' => ['required', 'exists:voting_events,id'],
+            'nama'            => ['required', 'string', 'max:255'],
+            'asal_sekolah'    => ['nullable', 'string', 'max:255'],
+            'no_hp'           => ['nullable', 'string', 'max:20'],
         ]);
 
         Member::create([
@@ -85,7 +94,7 @@ class VoterController extends Controller
 
         return redirect()
             ->route('admin.voters.index')
-            ->with('success','Pemilih berhasil ditambahkan');
+            ->with('success', 'Pemilih berhasil ditambahkan');
     }
 
     /*
@@ -111,7 +120,7 @@ class VoterController extends Controller
 
         $events = VotingEvent::latest()->get();
 
-        return view('admin.voters.edit', compact('voter','events'));
+        return view('admin.voters.edit', compact('voter', 'events'));
     }
 
     /*
@@ -124,17 +133,17 @@ class VoterController extends Controller
         $this->ensureVoter($voter);
 
         $validated = $request->validate([
-            'voting_event_id' => ['required','exists:voting_events,id'],
-            'nama'            => ['required','string','max:255'],
-            'asal_sekolah'    => ['nullable','string','max:255'],
-            'no_hp'           => ['nullable','string','max:20'],
+            'voting_event_id' => ['required', 'exists:voting_events,id'],
+            'nama'            => ['required', 'string', 'max:255'],
+            'asal_sekolah'    => ['nullable', 'string', 'max:255'],
+            'no_hp'           => ['nullable', 'string', 'max:20'],
         ]);
 
         $voter->update($validated);
 
         return redirect()
             ->route('admin.voters.index')
-            ->with('success','Data pemilih berhasil diperbarui');
+            ->with('success', 'Data pemilih berhasil diperbarui');
     }
 
     /*
@@ -148,7 +157,7 @@ class VoterController extends Controller
 
         $voter->delete();
 
-        return back()->with('success','Pemilih dipindahkan ke Trash');
+        return back()->with('success', 'Pemilih dipindahkan ke Trash');
     }
 
     /*
@@ -163,7 +172,7 @@ class VoterController extends Controller
             ->findOrFail($id)
             ->restore();
 
-        return back()->with('success','Pemilih berhasil direstore');
+        return back()->with('success', 'Pemilih berhasil direstore');
     }
 
     /*
@@ -178,7 +187,7 @@ class VoterController extends Controller
             ->findOrFail($id)
             ->forceDelete();
 
-        return back()->with('success','Pemilih dihapus permanen');
+        return back()->with('success', 'Pemilih dihapus permanen');
     }
 
     /*

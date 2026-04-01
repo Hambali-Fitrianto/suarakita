@@ -30,12 +30,12 @@ class VotingEvent extends Model
 
                 $prefix = collect(explode(' ', $event->judul))
                     ->take(3)
-                    ->map(fn ($w) => strtoupper(substr($w, 0, 1)))
+                    ->map(fn($w) => strtoupper(substr($w, 0, 1)))
                     ->implode('');
 
                 $year = now()->format('y');
 
-                $event->kode_event = $prefix.$year;
+                $event->kode_event = $prefix . $year;
             }
         });
     }
@@ -48,7 +48,7 @@ class VotingEvent extends Model
 
     public function members()
     {
-        return $this->hasMany(Member::class,'voting_event_id');
+        return $this->hasMany(Member::class, 'voting_event_id');
     }
 
     public function kandidat()
@@ -65,7 +65,7 @@ class VotingEvent extends Model
 
     public function sessions()
     {
-        return $this->hasMany(VotingSession::class,'voting_event_id');
+        return $this->hasMany(VotingSession::class, 'voting_event_id');
     }
 
     /*
@@ -85,5 +85,26 @@ class VotingEvent extends Model
                     'nomor_urut' => $index + 1
                 ]);
             });
+    }
+
+    // public function activeSession()
+    // {
+    //     return $this->sessions()
+    //         ->where('mulai_at', '<=', now())
+    //         ->where('selesai_at', '>=', now())
+    //         ->latest()
+    //         ->first();
+    // }
+
+    public function activeSession()
+    {
+        return $this->sessions()
+            ->where('status', 'aktif')
+            ->orWhere(function ($q) {
+                $q->where('mulai_at', '<=', now())
+                    ->where('selesai_at', '>=', now());
+            })
+            ->latest()
+            ->first();
     }
 }

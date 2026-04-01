@@ -168,4 +168,18 @@ class EventController extends Controller
             ->route('admin.events.trash')
             ->with('success', 'Event dihapus permanen');
     }
+
+    // Tambahkan ini di dalam class EventController
+    public function tokens(VotingEvent $event)
+    {
+        // 1. Ambil data token
+        $tokens = \App\Models\Token::where('voting_event_id', $event->id)
+            ->with(['member', 'session'])
+            ->latest()
+            ->paginate(20);
+
+        // 2. KIRIM $event KE VIEW (Ini yang bikin error kalau tidak ada)
+        // Sesuaikan path view dengan folder kamu: admin/tokens/index.blade.php
+        return view('admin.tokens.index', compact('event', 'tokens'));
+    }
 }

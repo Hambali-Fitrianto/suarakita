@@ -15,6 +15,7 @@ class Vote extends Model
         'voting_event_id',
         'voting_session_id',
         'member_id',     // voter
+        'token_id',      // <--- TAMBAHKAN INI BOS!
         'candidate_id',  // kandidat
     ];
 
@@ -27,6 +28,7 @@ class Vote extends Model
         'voting_event_id'   => 'integer',
         'voting_session_id' => 'integer',
         'member_id'         => 'integer',
+        'token_id'          => 'integer', // <--- TAMBAHKAN INI JUGA
         'candidate_id'      => 'integer',
     ];
 
@@ -44,6 +46,12 @@ class Vote extends Model
     public function session()
     {
         return $this->belongsTo(VotingSession::class, 'voting_session_id');
+    }
+
+    // Relasi ke Token (Opsional tapi bagus untuk tracing)
+    public function token()
+    {
+        return $this->belongsTo(Token::class, 'token_id');
     }
 
     /**
