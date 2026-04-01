@@ -58,31 +58,28 @@ class VotingSession extends Model
     */
     public function getComputedStatusAttribute(): string
     {
-        // 1. Jika Admin SUDAH set status manual selain 'draft', prioritaskan itu.
-        // Tapi jika masih 'draft', JANGAN RETURN, lanjut cek waktu di bawah.
-        if ($this->status !== self::STATUS_DRAFT) {
+        // 1. Ambil waktu sekarang sesuai timezone Asia/Jakarta
+        $now = now();
+
+        // 2. Jika di database statusnya 'selesai' atau 'jeda', kunci di situ (jangan diubah waktu)
+        if (in_array($this->status, [self::STATUS_SELESAI, self::STATUS_JEDA])) {
             return $this->status;
         }
 
-        // 2. Jika status di DB masih 'draft', mari kita cek waktunya secara DINAMIS
-        if (!$this->mulai_at || !$this->selesai_at) {
-            return self::STATUS_DRAFT;
+        // 3. LOGIC DINAMIS: Walaupun di DB tulisannya 'draft' atau 'aktif', 
+        // kita cek waktunya. Kalau masuk rentang, paksa jadi AKTIF.
+        if ($this->mulai_at && $this->selesai_at) {
+            if ($now->between($this->mulai_at, $this->selesai_at)) {
+                return self::STATUS_AKTIF;
+            }
+
+            if ($now->gt($this->selesai_at)) {
+                return self::STATUS_SELESAI;
+            }
         }
 
-        $now = now();
-
-        // Cek apakah sudah masuk waktu mulai tapi belum lewat waktu selesai
-        if ($now->between($this->mulai_at, $this->selesai_at)) {
-            return self::STATUS_AKTIF;
-        }
-
-        // Cek apakah sudah lewat waktu selesai
-        if ($now->gt($this->selesai_at)) {
-            return self::STATUS_SELESAI;
-        }
-
-        // Jika belum masuk waktu mulai
-        return self::STATUS_DRAFT;
+        // 4. Kalau belum waktunya, baru return status asli dari DB (draft)
+        return $this->status;
     }
 
     public function isDraft(): bool
