@@ -58,30 +58,30 @@ class VotingSession extends Model
     */
     public function getComputedStatusAttribute(): string
     {
-        // PERBAIKAN: Jika admin sudah set 'aktif' atau 'selesai' di DB, jangan di-override pakai waktu.
-        // Ini biar status di production gak balik-balik ke draft terus.
-        if (in_array($this->status, [self::STATUS_AKTIF, self::STATUS_SELESAI, self::STATUS_JEDA])) {
+        // 1. Jika Admin SUDAH set status manual selain 'draft', prioritaskan itu.
+        // Tapi jika masih 'draft', JANGAN RETURN, lanjut cek waktu di bawah.
+        if ($this->status !== self::STATUS_DRAFT) {
             return $this->status;
         }
 
+        // 2. Jika status di DB masih 'draft', mari kita cek waktunya secara DINAMIS
         if (!$this->mulai_at || !$this->selesai_at) {
             return self::STATUS_DRAFT;
         }
 
         $now = now();
 
-        if ($now->lt($this->mulai_at)) {
-            return self::STATUS_DRAFT;
-        }
-
+        // Cek apakah sudah masuk waktu mulai tapi belum lewat waktu selesai
         if ($now->between($this->mulai_at, $this->selesai_at)) {
             return self::STATUS_AKTIF;
         }
 
+        // Cek apakah sudah lewat waktu selesai
         if ($now->gt($this->selesai_at)) {
             return self::STATUS_SELESAI;
         }
 
+        // Jika belum masuk waktu mulai
         return self::STATUS_DRAFT;
     }
 
