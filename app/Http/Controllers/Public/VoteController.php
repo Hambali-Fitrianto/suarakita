@@ -43,75 +43,39 @@ class VoteController extends Controller
     | SHOW VOTING PAGE
     |--------------------------------------------------------------------------
     */
-    public function index(ActiveSessionResolver $resolver)
+    public function index()
     {
-        /*
-        | TOKEN CHECK
-        */
         $token = $this->resolveTokenFromSession();
 
         if (!$token) {
-            return redirect('/token')
-                ->with('error', 'Silakan masukkan token terlebih dahulu.');
+            return redirect('/token')->with('error', 'Silakan masukkan token terlebih dahulu.');
         }
 
-        /*
-        | RESOLVE ACTIVE SESSION (LOGIC PERBAIKAN) ⭐
-        */
-        $session = $resolver->resolve();
-
-        // JIKA RESOLVER GAGAL, PAKSA CARI BERDASARKAN ID DI TOKEN
-        if (!$session) {
-            $session = VotingSession::find($token->voting_session_id);
-        }
+        // BYPASS RESOLVER: Langsung cari session yang nempel di token
+        $session = \App\Models\VotingSession::find($token->voting_session_id);
 
         if (!$session) {
+            return view('voting.closed', ['message' => 'Session tidak ditemukan.']);
+        }
+
+        // PAKSA CEK STATUS: Kalau di DB sudah 'aktif', langsung tembusin!
+        if ($session->status !== 'aktif') {
             return view('voting.closed', [
-                'message' => 'Belum ada session voting aktif.'
+                'message' => 'Voting ' . ($session->nama_sesi ?? '') . ' belum dibuka.'
             ]);
         }
 
-        /*
-        | TOKEN HARUS SESUAI SESSION
-        */
-        if ($token->voting_session_id !== $session->id) {
-            return view('voting.closed', [
-                'message' => 'Token tidak berlaku untuk session ini.'
-            ]);
-        }
-
-        /*
-        | SESSION STATUS CHECK (MENGGUNAKAN LOGIC MODEL YANG SUDAH DI-FIX) ⭐
-        */
-        if (!$session->isAktif()) {
-            return view('voting.closed', [
-                'message' => 'Voting ' . ($session->nama_sesi ?? '') . ' belum dimulai atau sudah berakhir.'
-            ]);
-        }
-
-        /*
-        | EVENT
-        */
-        $event = VotingEvent::findOrFail($session->voting_event_id);
-
-        /*
-        | AMBIL KANDIDAT
-        */
-        $candidates = $event->kandidat()
-            ->orderBy('nomor_urut')
-            ->get();
+        $event = \App\Models\VotingEvent::findOrFail($session->voting_event_id);
+        $candidates = $event->kandidat()->orderBy('nomor_urut')->get();
 
         return view('voting.vote', [
             'session'    => $session,
             'event'      => $event,
             'candidates' => $candidates,
             'token'      => $token,
-            'endsAt'     => $session->selesai_at
-                ? \Carbon\Carbon::parse($session->selesai_at)->timestamp
-                : null,
+            'endsAt'     => $session->selesai_at ? \Carbon\Carbon::parse($session->selesai_at)->timestamp : null,
         ]);
     }
-
 
     /*
     |--------------------------------------------------------------------------
