@@ -11,6 +11,7 @@ use App\Models\Token;
 use App\Models\Vote;
 use App\Models\Member;
 use App\Models\VotingEvent;
+use App\Models\VotingSession; // WAJIB ADA
 
 class VoteController extends Controller
 {
@@ -55,9 +56,14 @@ class VoteController extends Controller
         }
 
         /*
-        | RESOLVE ACTIVE SESSION
+        | RESOLVE ACTIVE SESSION (LOGIC PERBAIKAN) ⭐
         */
         $session = $resolver->resolve();
+
+        // JIKA RESOLVER GAGAL, PAKSA CARI BERDASARKAN ID DI TOKEN
+        if (!$session) {
+            $session = VotingSession::find($token->voting_session_id);
+        }
 
         if (!$session) {
             return view('voting.closed', [
@@ -75,11 +81,11 @@ class VoteController extends Controller
         }
 
         /*
-        | SESSION STATUS CHECK
+        | SESSION STATUS CHECK (MENGGUNAKAN LOGIC MODEL YANG SUDAH DI-FIX) ⭐
         */
         if (!$session->isAktif()) {
             return view('voting.closed', [
-                'message' => 'Voting belum dimulai atau sudah berakhir.'
+                'message' => 'Voting ' . ($session->nama_sesi ?? '') . ' belum dimulai atau sudah berakhir.'
             ]);
         }
 
@@ -109,7 +115,7 @@ class VoteController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | SUBMIT VOTE (UPDATED: REDIRECT TO RESULT WITH ALERT)
+    | SUBMIT VOTE
     |--------------------------------------------------------------------------
     */
     public function submit(Request $request, ActiveSessionResolver $resolver)
@@ -128,7 +134,6 @@ class VoteController extends Controller
                 ->with('error', 'Session voting tidak ditemukan.');
         }
 
-        // Jika token sudah terpakai, langsung lempar ke hasil session tersebut
         if ($token->is_used) {
             return redirect()->route('public.result.show', $token->voting_session_id);
         }
@@ -136,9 +141,9 @@ class VoteController extends Controller
         $member = $token->member;
 
         /*
-        | SESSION VALIDATION
+        | SESSION VALIDATION (PAKSA CARI JIKA RESOLVER NULL) ⭐
         */
-        $session = $resolver->resolve();
+        $session = $resolver->resolve() ?? VotingSession::find($token->voting_session_id);
 
         if (!$session || $session->id !== $token->voting_session_id) {
             return redirect('/vote')
@@ -154,7 +159,6 @@ class VoteController extends Controller
 
         /*
         | ONE PERSON ONE VOTE
-        | Jika sudah pernah vote, lempar ke hasil
         */
         if ($member->hasVotedInEvent($event->id)) {
             return redirect()->route('public.result.show', $session->id);
@@ -173,16 +177,9 @@ class VoteController extends Controller
         }
 
         /*
-        | SAVE VOTE (TRANSACTION SAFE)
+        | SAVE VOTE
         */
-        DB::transaction(function () use (
-            $token,
-            $session,
-            $candidate,
-            $member,
-            $event
-        ) {
-
+        DB::transaction(function () use ($token, $session, $candidate, $member, $event) {
             Vote::create([
                 'voting_event_id'   => $event->id,
                 'voting_session_id' => $session->id,
@@ -197,19 +194,9 @@ class VoteController extends Controller
             ]);
         });
 
-        /*
-        | AMBIL ID SESSION UNTUK REDIRECT
-        */
         $targetSessionId = $session->id;
-
-        /*
-        | CLEAR SESSION TOKEN
-        */
         session()->forget('voting_token_id');
 
-        /*
-        | REDIRECT LANGSUNG KE HALAMAN HASIL DENGAN NOTIFIKASI
-        */
         return redirect()->route('public.result.show', $targetSessionId)
             ->with('success', 'Terima kasih! Suara Anda berhasil dikirim.');
     }
@@ -240,12 +227,11 @@ class VoteController extends Controller
 
     /*
     |--------------------------------------------------------------------------
-    | SUCCESS PAGE (MODIFIED TO REDIRECT)
+    | SUCCESS PAGE
     |--------------------------------------------------------------------------
     */
     public function success()
     {
-        // Halaman ini tidak lagi diperlukan jika submit langsung redirect ke hasil
         return redirect()->route('public.result.index');
     }
 }
