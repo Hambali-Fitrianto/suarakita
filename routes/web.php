@@ -40,6 +40,32 @@ Route::get('/', function () {
     return view('landing');
 })->name('landing');
 
+Route::get('/debug-waktu', function () {
+    // Mencari session yang statusnya 'aktif' 
+    // atau yang waktunya masuk rentang sekarang
+    $session = \App\Models\VotingSession::where('status', 'aktif')
+        ->orWhere(function ($q) {
+            $q->where('mulai_at', '<=', now())
+                ->where('selesai_at', '>=', now());
+        })
+        ->first();
+
+    return response()->json([
+        'WAKTU_SERVER_SAAT_INI' => now()->toDateTimeString(),
+        'TIMEZONE_CONFIG'      => config('app.timezone'),
+        'HASIL_DEBUG' => [
+            'apakah_session_ketemu' => $session ? 'YA' : 'TIDAK',
+            'id_session'            => $session?->id,
+            'nama_session'          => $session?->nama,
+            'status_di_db'          => $session?->status,
+            'mulai_at'              => $session?->mulai_at,
+            'selesai_at'            => $session?->selesai_at,
+            'cek_logic_mulai'       => $session ? (now() >= $session->mulai_at) : false,
+            'cek_logic_selesai'     => $session ? (now() <= $session->selesai_at) : false,
+        ]
+    ]);
+});
+
 /*
 | TOKEN VALIDATION
 */
@@ -51,8 +77,8 @@ Route::post('/token/verify', [TokenController::class, 'verify'])->name('token.ve
 */
 Route::get('/vote', [VoteController::class, 'index'])->name('vote.index');
 Route::post('/vote/submit', [VoteController::class, 'submit'])->name('vote.submit');
-Route::get('/vote/success', [VoteController::class,'success'])->name('vote.success');
-Route::get('/vote/{token}', [VoteController::class,'direct'])->where('token','[A-Za-z0-9]+')->name('vote.direct');
+Route::get('/vote/success', [VoteController::class, 'success'])->name('vote.success');
+Route::get('/vote/{token}', [VoteController::class, 'direct'])->where('token', '[A-Za-z0-9]+')->name('vote.direct');
 Route::get('/vote/reset', function () {
     session()->forget('voting_token_id');
     return redirect()->route('landing');
@@ -96,9 +122,9 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     |--------------------------------
     */
     Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->name('dashboard');
+        ->name('dashboard');
 
-        /*
+    /*
     |--------------------------------
     | EVENT TRASH (SOFT DELETE)
     |--------------------------------
@@ -125,8 +151,8 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     | INVITE VOTERS (NEW)
     |--------------------------------
     */
-    Route::get('/events/{event}/voters', [EventVoterController::class,'index'])->name('events.voters.index');
-    Route::post('/events/{event}/voters', [EventVoterController::class,'store'])->name('events.voters.store');
+    Route::get('/events/{event}/voters', [EventVoterController::class, 'index'])->name('events.voters.index');
+    Route::post('/events/{event}/voters', [EventVoterController::class, 'store'])->name('events.voters.store');
 
     /*
     |--------------------------------
@@ -185,10 +211,10 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('/sessions/{session}/edit', [SessionController::class, 'edit'])->name('sessions.edit');
     Route::put('/sessions/{session}/update', [SessionController::class, 'update'])->name('sessions.update');
     Route::delete('/sessions/{session}/delete', [SessionController::class, 'destroy'])->name('sessions.destroy');
-    
+
     Route::post('/sessions/{session}/generate-tokens', [SessionController::class, 'generateTokens'])->name('sessions.tokens.generate');
     Route::get('/sessions/{session}/tokens', [SessionController::class, 'tokens'])->name('sessions.tokens.index');
-    
+
     /*
     |--------------------------------
     | CHART REALTIME
@@ -216,7 +242,6 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-
 });
 
 /*
@@ -225,4 +250,4 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
 |--------------------------------------------------------------------------
 */
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';
