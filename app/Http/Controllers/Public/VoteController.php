@@ -5,44 +5,26 @@ namespace App\Http\Controllers\Public;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-
-use App\Services\Voting\ActiveSessionResolver;
 use App\Models\Token;
 use App\Models\Vote;
 use App\Models\Member;
 use App\Models\VotingEvent;
-use App\Models\VotingSession; // WAJIB ADA
+use App\Models\VotingSession;
 
 class VoteController extends Controller
 {
-    /*
-    |--------------------------------------------------------------------------
-    | DIRECT TOKEN ACCESS (QR / LINK)
-    |--------------------------------------------------------------------------
-    */
     public function direct(string $tokenValue)
     {
         $token = Token::where('token', $tokenValue)->first();
 
         if (!$token || $token->is_used) {
-            return redirect('/token')
-                ->with('error', 'Token tidak valid atau sudah digunakan.');
+            return redirect('/token')->with('error', 'Token tidak valid atau sudah digunakan.');
         }
 
-        // simpan token ke session
-        session([
-            'voting_token_id' => $token->id
-        ]);
-
+        session(['voting_token_id' => $token->id]);
         return redirect()->route('vote.index');
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | SHOW VOTING PAGE
-    |--------------------------------------------------------------------------
-    */
     public function index()
     {
         $token = $this->resolveTokenFromSession();
@@ -51,21 +33,19 @@ class VoteController extends Controller
             return redirect('/token')->with('error', 'Silakan masukkan token terlebih dahulu.');
         }
 
-        // BYPASS RESOLVER: Langsung cari session yang nempel di token
-        $session = \App\Models\VotingSession::find($token->voting_session_id);
+        $session = VotingSession::find($token->voting_session_id);
 
         if (!$session) {
             return view('voting.closed', ['message' => 'Session tidak ditemukan.']);
         }
 
-        // PAKSA CEK STATUS: Kalau di DB sudah 'aktif', langsung tembusin!
         if ($session->status !== 'aktif') {
             return view('voting.closed', [
                 'message' => 'Voting ' . ($session->nama_sesi ?? '') . ' belum dibuka.'
             ]);
         }
 
-        $event = \App\Models\VotingEvent::findOrFail($session->voting_event_id);
+        $event = VotingEvent::findOrFail($session->voting_event_id);
         $candidates = $event->kandidat()->orderBy('nomor_urut')->get();
 
         return view('voting.vote', [
@@ -77,60 +57,34 @@ class VoteController extends Controller
         ]);
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | SUBMIT VOTE
-    |--------------------------------------------------------------------------
-    */
-    public function submit(Request $request, ActiveSessionResolver $resolver)
+    public function submit(Request $request)
     {
         $request->validate([
             'candidate_id' => ['required', 'integer'],
         ]);
 
-        /*
-        | TOKEN VALIDATION
-        */
         $token = $this->resolveTokenFromSession();
 
         if (!$token) {
-            return redirect('/token')
-                ->with('error', 'Session voting tidak ditemukan.');
+            return redirect('/token')->with('error', 'Session voting tidak ditemukan.');
         }
 
-        if ($token->is_used) {
-            return redirect()->route('public.result.show', $token->voting_session_id);
-        }
+        // 1. Ambil Session Langsung dari Token (Anti Ribet)
+        $session = VotingSession::find($token->voting_session_id);
 
-        $member = $token->member;
-
-        /*
-        | SESSION VALIDATION (PAKSA CARI JIKA RESOLVER NULL) ⭐
-        */
-        $session = $resolver->resolve() ?? VotingSession::find($token->voting_session_id);
-
-        if (!$session || $session->id !== $token->voting_session_id) {
-            return redirect('/vote')
-                ->with('error', 'Session voting sudah berakhir.');
-        }
-
-        if (!$session->isAktif()) {
-            return redirect('/vote')
-                ->with('error', 'Voting sudah ditutup.');
+        if (!$session || $session->status !== 'aktif') {
+            return redirect('/vote')->with('error', 'Voting sudah ditutup atau tidak aktif.');
         }
 
         $event = VotingEvent::findOrFail($session->voting_event_id);
+        $member = $token->member;
 
-        /*
-        | ONE PERSON ONE VOTE
-        */
+        // 2. Cek apakah sudah pernah vote di event ini
         if ($member->hasVotedInEvent($event->id)) {
             return redirect()->route('public.result.show', $session->id);
         }
 
-        /*
-        | VALIDASI KANDIDAT
-        */
+        // 3. Validasi Kandidat
         $candidate = Member::where('id', $request->candidate_id)
             ->where('voting_event_id', $event->id)
             ->where('role', Member::ROLE_KANDIDAT)
@@ -140,10 +94,10 @@ class VoteController extends Controller
             return back()->with('error', 'Kandidat tidak valid.');
         }
 
-        /*
-        | SAVE VOTE
-        */
-        DB::transaction(function () use ($token, $session, $candidate, $member, $event) {
+        // 4. Proses Simpan Data
+        try {
+            DB::beginTransaction();
+
             Vote::create([
                 'voting_event_id'   => $event->id,
                 'voting_session_id' => $session->id,
@@ -156,44 +110,31 @@ class VoteController extends Controller
                 'is_used' => true,
                 'used_at' => now(),
             ]);
-        });
 
-        $targetSessionId = $session->id;
-        session()->forget('voting_token_id');
+            DB::commit();
 
-        return redirect()->route('public.result.show', $targetSessionId)
-            ->with('success', 'Terima kasih! Suara Anda berhasil dikirim.');
+            $targetSessionId = $session->id;
+            session()->forget('voting_token_id');
+
+            return redirect()->route('public.result.show', $targetSessionId)
+                ->with('success', 'Terima kasih! Suara Anda berhasil dikirim.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return back()->with('error', 'Terjadi kesalahan: ' . $e->getMessage());
+        }
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | HELPER — TOKEN SESSION RESOLVER
-    |--------------------------------------------------------------------------
-    */
     private function resolveTokenFromSession(): ?Token
     {
         $tokenId = session('voting_token_id');
-
-        if (!$tokenId) {
-            return null;
-        }
+        if (!$tokenId) return null;
 
         $token = Token::with('member')->find($tokenId);
-
-        if (!$token || $token->is_used) {
-            return null;
-        }
+        if (!$token || $token->is_used) return null;
 
         return $token;
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | SUCCESS PAGE
-    |--------------------------------------------------------------------------
-    */
     public function success()
     {
         return redirect()->route('public.result.index');

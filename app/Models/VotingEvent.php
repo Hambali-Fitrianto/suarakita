@@ -17,34 +17,20 @@ class VotingEvent extends Model
         'kode_event',
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | AUTO EVENT CODE
-    |--------------------------------------------------------------------------
-    */
     protected static function booted()
     {
         static::creating(function ($event) {
-
             if (!$event->kode_event) {
-
                 $prefix = collect(explode(' ', $event->judul))
                     ->take(3)
                     ->map(fn($w) => strtoupper(substr($w, 0, 1)))
                     ->implode('');
 
                 $year = now()->format('y');
-
                 $event->kode_event = $prefix . $year;
             }
         });
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | RELATIONS
-    |--------------------------------------------------------------------------
-    */
 
     public function members()
     {
@@ -53,26 +39,18 @@ class VotingEvent extends Model
 
     public function kandidat()
     {
-        return $this->members()
-            ->where('role', Member::ROLE_KANDIDAT);
+        return $this->members()->where('role', Member::ROLE_KANDIDAT);
     }
 
     public function pemilih()
     {
-        return $this->members()
-            ->where('role', Member::ROLE_PEMILIH);
+        return $this->members()->where('role', Member::ROLE_PEMILIH);
     }
 
     public function sessions()
     {
         return $this->hasMany(VotingSession::class, 'voting_event_id');
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | AUTO REORDER CANDIDATES
-    |--------------------------------------------------------------------------
-    */
 
     public function reorderCandidates(): void
     {
@@ -87,22 +65,16 @@ class VotingEvent extends Model
             });
     }
 
-    // public function activeSession()
-    // {
-    //     return $this->sessions()
-    //         ->where('mulai_at', '<=', now())
-    //         ->where('selesai_at', '>=', now())
-    //         ->latest()
-    //         ->first();
-    // }
-
+    // METHOD INI YANG DICARI CONTROLLER
     public function activeSession()
     {
         return $this->sessions()
-            ->where('status', 'aktif')
-            ->orWhere(function ($q) {
-                $q->where('mulai_at', '<=', now())
-                    ->where('selesai_at', '>=', now());
+            ->where(function ($q) {
+                $q->where('status', 'aktif')
+                    ->orWhere(function ($sq) {
+                        $sq->where('mulai_at', '<=', now())
+                            ->where('selesai_at', '>=', now());
+                    });
             })
             ->latest()
             ->first();
