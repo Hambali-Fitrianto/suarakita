@@ -129,12 +129,22 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('/candidates/trash', [CandidateController::class, 'trash'])->name('candidates.trash');
     Route::put('/candidates/{id}/restore', [CandidateController::class, 'restore'])->name('candidates.restore');
     Route::delete('/candidates/{id}/force-delete', [CandidateController::class, 'forceDelete'])->name('candidates.forceDelete');
+
+    Route::get('/candidates/export-template', [CandidateController::class, 'exportTemplate'])->name('candidates.export-template');
+    Route::get('/candidates/export-data', [CandidateController::class, 'exportData'])->name('candidates.export-data');
+    Route::post('/candidates/import', [CandidateController::class, 'import'])->name('candidates.import');
+
     Route::resource('candidates', CandidateController::class);
 
     // Voters
     Route::get('/voters/trash', [VoterController::class, 'trash'])->name('voters.trash');
     Route::put('/voters/{id}/restore', [VoterController::class, 'restore'])->name('voters.restore');
     Route::delete('/voters/{id}/force-delete', [VoterController::class, 'forceDelete'])->name('voters.forceDelete');
+
+    Route::get('/voters/export-template', [VoterController::class, 'exportTemplate'])->name('voters.export-template');
+    Route::get('/voters/export-data', [VoterController::class, 'exportData'])->name('voters.export-data');
+    Route::post('/voters/import', [VoterController::class, 'import'])->name('voters.import');
+
     Route::resource('voters', VoterController::class);
 
     // Sessions

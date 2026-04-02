@@ -6,6 +6,10 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Member;
 use App\Models\VotingEvent;
+use App\Exports\VoterTemplateExport;
+use App\Exports\VoterExport;
+use App\Imports\VoterImport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class VoterController extends Controller
 {
@@ -31,13 +35,11 @@ class VoterController extends Controller
             $query->where('members.voting_event_id', $request->event_id);
         }
 
-        $voters = $query->orderBy('voting_events.judul')
-            ->orderBy('members.nama')
-            ->paginate(20)
-            ->withQueryString(); // Agar pagination tidak hilang saat di-filter
+        $voters = $query->orderBy('voting_events.judul', 'asc')
+            ->orderBy('members.nama', 'asc')
+            ->get();
 
         $events = VotingEvent::orderBy('judul')->get();
-
         $trashCount = Member::onlyTrashed()->pemilih()->count();
 
         return view('admin.voters.index', compact('voters', 'trashCount', 'events'));
@@ -200,5 +202,36 @@ class VoterController extends Controller
         if (!$member->isPemilih()) {
             abort(404);
         }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | EXPORT & IMPORT
+    |--------------------------------------------------------------------------
+    */
+    public function exportTemplate()
+    {
+        return Excel::download(new VoterTemplateExport, 'template-pemilih.xlsx');
+    }
+
+    public function exportData(Request $request)
+    {
+        // Mengambil event_id dari request URL
+        $eventId = $request->event_id;
+
+        // Pastikan hanya mengirim eventId ke constructor
+        return Excel::download(new VoterExport($eventId), 'data-pemilih-existing.xlsx');
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'voting_event_id' => 'required|exists:voting_events,id',
+            'file_excel'      => 'required|mimes:xlsx,xls',
+        ]);
+
+        Excel::import(new VoterImport($request->voting_event_id), $request->file('file_excel'));
+
+        return back()->with('success', 'Data pemilih berhasil diproses!');
     }
 }
